@@ -1,0 +1,165 @@
+#include <esp-knx-ip.h>
+#include <WiFiManager.h> // Include the WiFiManager library
+#include <time.h>
+#include <ESP8266WiFi.h>
+#include <Wire.h>
+#include "SSD1306Wire.h"
+
+SSD1306Wire display(0x3c, D5 , D6 );
+
+
+// Wi-Fi Credentials
+const char* ssid = "QWL Smart Lamp QM23027 ";            // Replace with your Wi-Fi SSID
+const char* password = "13355556";    // Replace with your Wi-Fi password
+
+const unsigned char image1 [] PROGMEM = {
+  // 'pixil-frame-0, 32x32px
+ 0x00, 0x00, 0x00, 0x00, 0x80, 0xff, 0xff, 0x07, 0x40, 0x00, 0x00, 0x0a, 0x20, 0x00, 0x00, 0x09, 
+ 0xf0, 0xff, 0xff, 0x08, 0x10, 0x00, 0x80, 0x08, 0x10, 0x00, 0x80, 0x08, 0xf0, 0xff, 0xff, 0x08, 
+  0xf0, 0xff, 0xff, 0x08, 0xf0, 0x1f, 0xff, 0x08, 0xd0, 0x0f, 0xbe, 0x08, 0x90, 0x07, 0x9c, 0x09, 
+  0x18, 0x00, 0x80, 0x0a, 0x14, 0x38, 0x80, 0x0a, 0x14, 0x48, 0x80, 0x0a, 0x14, 0x88, 0x80, 0x0a, 
+  0x12, 0x88, 0x80, 0x0a, 0x12, 0x88, 0x80, 0x08, 0x10, 0x88, 0x80, 0x08, 0x10, 0x48, 0x80, 0x04, 
+  0x10, 0x38, 0x80, 0x02, 0x10, 0x00, 0x80, 0x01, 0xf0, 0xff, 0xff, 0x00, 0x00, 0x01, 0x02, 0x00, 
+  0x00, 0x01, 0x02, 0x00, 0x00, 0x01, 0x02, 0x00, 0xc0, 0x01, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+};
+
+const unsigned char image2 [] PROGMEM = {
+  // 'pixil-frame-0, 32x32px
+ 0x00, 0x00, 0x00, 0x00, 0x80, 0xff, 0xff, 0x07, 0x40, 0x00, 0x00, 0x0a, 0x20, 0x00, 0x00, 0x09, 
+ 0xf0, 0xff, 0xff, 0x08, 0x10, 0x00, 0x80, 0x08, 0x10, 0x00, 0x80, 0x08, 0xf0, 0xff, 0xff, 0x08, 
+  0xf0, 0xff, 0xff, 0x08, 0xf0, 0x1f, 0xff, 0x08, 0xd0, 0x0f, 0xbe, 0x08, 0x90, 0x07, 0x9c, 0x09, 
+  0x18, 0x00, 0x80, 0x0a, 0x14, 0x38, 0x80, 0x0a, 0x14, 0x48, 0x80, 0x0a, 0x14, 0x88, 0x80, 0x0a, 
+  0x12, 0x88, 0x80, 0x0a, 0x12, 0x88, 0x80, 0x08, 0x10, 0x88, 0x80, 0x08, 0x10, 0x48, 0x80, 0x04, 
+  0x10, 0x38, 0x80, 0x02, 0x10, 0x00, 0x80, 0x01, 0xf0, 0xff, 0xff, 0x00, 0x00, 0x01, 0x02, 0x00, 
+  0x00, 0x01, 0x02, 0x00, 0x00, 0x01, 0x02, 0x00, 0xc0, 0x01, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+};
+
+
+const uint32_t LOOP_DELAY = 1000;
+const uint32_t S_LOOP_DELAY = 1000;
+bool itype=true;
+
+// NTP Server and Time Configuration
+const char* ntpServer = "pool.ntp.org";    // NTP server (can be regional, e.g., "europe.pool.ntp.org")
+const long gmtOffset_sec = 3600;              // GMT offset in seconds (e.g., 0 for GMT)
+const int daylightOffset_sec = 3600;       // Daylight offset in seconds (1 hour = 3600 seconds)
+
+
+
+// Function to set the KNX physical address
+void setKNXPhysicalAddress(int area, int line, int member) {
+  address_t receiving_pa;
+  receiving_pa.pa.area = area;
+  receiving_pa.pa.line = line;
+  receiving_pa.pa.member = member;
+  knx.physical_address_set(receiving_pa);      // Set the physical address for KNX
+}
+
+// Function to calculate the group address for KNX
+address_t calculate_ga(int area, int line, int member) {
+  address_t tmp;
+  tmp.ga.area = area;
+  tmp.ga.line = line;
+  tmp.ga.member = member;
+  return tmp;
+}
+
+
+void setup() {
+
+
+
+  Serial.begin(115200);
+
+
+
+
+  WiFiManager wifiManager;
+  wifiManager.autoConnect("p0wned"); // Name of the Access Point when in configuration mode
+  Serial.println("Connected to WiFi!");
+
+  Serial.print("IP Address: ");
+  Serial.println(WiFi.localIP());
+
+  // Initialize NTP
+  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+  Serial.println("Time synchronization initialized");
+
+  // Wait for the time to be set
+  struct tm timeInfo;
+  if (!getLocalTime(&timeInfo)) {
+    Serial.println("Failed to obtain time");
+    return;
+  }
+  char timeStr[50];
+  strftime(timeStr, sizeof(timeStr), "%A, %B %d %Y %H:%M:%S", &timeInfo);
+  Serial.println(timeStr);
+
+  // Set up KNX/IP
+  knx.start(nullptr);  // Start the KNX/IP loop without webserver
+
+  // Your KNX address or other setup
+  address_t knx_address = { .pa = { 1, 1, 10 } };  // Example physical address
+  knx.physical_address_set(knx_address);
+
+
+display.init();
+
+  // display.flipScreenVertically();
+
+  display.setContrast(255);
+
+  Serial.println("drawing");
+  display.displayOn();
+   Serial.println("1");
+  void setColor(OLEDDISPLAY_COLOR WHITE);
+   Serial.println("2");
+  display.drawXbm(48, 16, 32, 32, image1);
+   Serial.println("3");
+   display.display();
+   
+}
+
+void loop() {
+  int photoval = 0;
+  knx.loop();  // KNX communication loop
+
+  // Non-blocking delay using millis()
+  static uint32_t lastTime = 0;
+  static String data = "";
+
+
+
+
+  if (millis() - lastTime >= LOOP_DELAY) {
+    display.clear();
+    if (itype){
+      display.drawXbm(48, 16, 32, 32, image1);
+      itype=false;
+    } else{
+      display.drawXbm(48, 16, 32, 32, image2);
+      itype=true;
+    }
+    display.display();
+
+    struct tm timeInfo;
+    if (!getLocalTime(&timeInfo)) {
+      data = "Failed to obtain time";
+      return;
+    }
+    char timeStr[50];
+    strftime(timeStr, sizeof(timeStr), "%A, %B %d %Y %H:%M:%S", &timeInfo);
+    data = timeStr;
+    lastTime = millis();
+    photoval = analogRead(A0);
+    //
+
+    // Increment counter and send to KNX group address
+    data = data + ": " + String(photoval) + ";";
+    Serial.println(data);
+    Serial.println(" KNX telegram:");
+    knx.write_1byte_uint(calculate_ga(3, 0, 15), photoval);
+  }  // Send telegram every 10 seconds (for example)
+}
